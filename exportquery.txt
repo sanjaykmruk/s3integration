@@ -1,0 +1,1 @@
+$ aws dynamodb export-table-to-point-in-time     --table-arn "arn:aws:dynamodb:eu-north-1:654654212746:table/sj_test_table"     --s3-bucket "sj-test1-bucket"     --export-time 1713205421     --s3-prefix "sj-test"    --query "{employee:true}"    --export-format DYNAMODB_JSON
