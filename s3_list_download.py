@@ -1,69 +1,59 @@
 import os
+import gzip
+import shutil
+import json
+from multiprocessing import Pool
 
-import boto3
+THREAD_POOL = 5
+output_dir = '../output/'
+input_dir = '../input/'
+# data_file_name = "dynomodata.json"
+# Specify the directory path to read all the gzip files
+gz_directory_path = "./"
 
-output_dir = "./output/"
-input_dir = './input/'
-data_file_name = "dynomodata.json"
+# Get all entries in the directory
+gz_entries = os.listdir(gz_directory_path)
 
 # create input and output files with directory
 
-os.makedirs(name=os.path.dirname(input_dir + data_file_name), exist_ok=True)
-os.makedirs(name=os.path.dirname(output_dir + data_file_name), exist_ok=True)
+os.makedirs(name=os.path.dirname(input_dir), exist_ok=True)
+os.makedirs(name=os.path.dirname(output_dir), exist_ok=True)
 
-# Let's use Amazon S3
-aws_access_key_id = ''
-aws_secret_access_key = ''
-s3Client = boto3.client('s3', aws_access_key_id=aws_access_key_id,
-                        aws_secret_access_key=aws_secret_access_key)
-s3 = boto3.resource('s3', aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key)
+# function to parallel process the file
+def processfile(gz_file_name):
+# for gz_file in gz_entries:
+#     if os.path.isfile(os.path.join(gz_directory_path, gz_file)):
+#         print(gz_file)
+        
+        print(gz_file_name)
+        
+        data_file_name= os.path.splitext(gz_file_name)[0]
+        print(data_file_name)
 
-# Dowlaoding all the files from the S3 bucket
+        # unzip the gz file
+        with gzip.open(gz_directory_path + gz_file_name, 'rb') as gz_in:
+            with open(input_dir + data_file_name, 'wb') as json_out:
+                shutil.copyfileobj(gz_in, json_out)
 
-print('Listing all the buckets')
-for bucket in s3.buckets.all():
-    print('Bucket name' + bucket.name)
-    data_bucket = s3.Bucket(bucket.name)
+        # Opening JSON file
 
-    print('Listing all the files in the bucket.')
-    for s3_file in data_bucket.objects.all():
-        print('File name: ' + s3_file.key)  # prints the contents of bucket
-        with open(input_dir + s3_file.key, 'wb') as gz_f:
-            print('Downloading the file.')
-            s3Client.download_fileobj(bucket.name, s3_file.key, gz_f)
+        with open(output_dir + data_file_name, 'w') as output_json_file:
+            with open(input_dir + data_file_name) as input_json_file:
+                for jsonObj in input_json_file:
+                    data = json.loads(jsonObj)
+
+                    TOKEN_STRING = data['Item']['TOKEN_STRING']['S']
+                    OWNER = data['Item']['TOKEN_DATA']['M']['owner']['S']
+                    SOURCE = data['Item']['SOURCE']['S']
+                    EXPIRY_TIME = data['Item']['EXPIRY_TIME']['N']
+                    CREATION_TIME = data['Item']['TOKEN_DATA']['M']['creationTime']['N']
+
+                    newdata = '{"_id":"' + str(TOKEN_STRING) + '","owner":"' + str(OWNER) + '","source":"' + str(
+                        SOURCE) + '","roles":["customer"],"extraData":{},"creationtime":{"$date":{"$numberLong":"' + str(CREATION_TIME) + '"}},"expirytime":{"$date":{"$numberLong":"' + str(EXPIRY_TIME)+'"}} }\n'
+                    # print(newdata)
+                    output_json_file.write(newdata)
 
 
-
-# unzip the gz file
-
-# with gzip.open('yzd4yireta7czlezr3naboqqde.json.gz', 'rb') as f_in:
-#     with open(input_dir + data_file_name, 'wb') as f_out:
-#         shutil.copyfileobj(f_in, f_out)
-
-# Opening JSON file
-
-# with open(output_dir + data_file_name, 'w') as output_json_file:
-#     with open(input_dir + data_file_name) as input_json_file:
-#         for jsonObj in input_json_file:
-#             data = json.loads(jsonObj)
-#
-#             # Print the type of data variable
-#             print("Type:", type(data))
-#
-#             TOKEN_STRING = data['Item']['TOKEN_STRING']['S']
-#             OWNER = data['Item']['TOKEN_DATA']['M']['owner']['S']
-#             SOURCE = data['Item']['SOURCE']['S']
-#             EXPIRY_TIME = data['Item']['EXPIRY_TIME']['N']
-#             CREATION_TIME = data['Item']['TOKEN_DATA']['M']['creationTime']['N']
-#             # Print the data of dictionary
-#             # print("\nTOKEN_STRING:", TOKEN_STRING)
-#             # print("\nOWNER:", OWNER)
-#             # print("\nSOURCE:", SOURCE)
-#             # print("\nEXPIRY_TIME:", EXPIRY_TIME)
-#             # print("\nCREATION_TIME:", CREATION_TIME)
-#
-#             newdata = '{"_id":"' + str(TOKEN_STRING) + '","owner":"' + str(OWNER) + '","source":"' + str(
-#                 SOURCE) + '","creationtime":"' + str(CREATION_TIME) + '","expirytime":"' + str(EXPIRY_TIME) + '" }\n'
-#             # print(newdata)
-#             output_json_file.write(newdata)
+if __name__ == '__main__':
+    with Pool(THREAD_POOL) as p:
+        p.map(processfile, gz_entries)
